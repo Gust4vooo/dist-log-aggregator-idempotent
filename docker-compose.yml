@@ -1,11 +1,56 @@
-storage:
+version: '3.8'
+
+services:
+  storage:
     image: postgres:16-alpine
+    container_name: uas_storage
     environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password_rahasia
       - POSTGRES_DB=log_db
-      - POSTGRES_USER=myuser
-      - POSTGRES_PASSWORD=mypassword
     volumes:
-      - pg_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pg_data:/var/lib/postgresql/data             
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql 
     networks:
       - internal_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d log_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  broker:
+    image: redis:7-alpine
+    container_name: uas_broker
+    networks:
+      - internal_net
+
+  aggregator:
+    build: ./aggregator
+    container_name: uas_aggregator
+    depends_on:
+      storage:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://admin:password_rahasia@storage:5432/log_db
+    ports:
+      - "8000:8000" 
+    networks:
+      - internal_net
+
+  publisher:
+    build: ./publisher
+    container_name: uas_publisher
+    depends_on:
+      - aggregator
+    environment:
+      - AGGREGATOR_URL=http://aggregator:8000/publish
+    networks:
+      - internal_net
+
+volumes:
+  pg_data:
+
+networks:
+  internal_net:
+    driver: bridge
