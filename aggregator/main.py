@@ -33,38 +33,22 @@ app = FastAPI(lifespan=lifespan)
 @app.post("/publish")
 async def publish_event(event: Event):
     pool = app.state.pool
-    
-    query = """
-        INSERT INTO processed_events (topic, event_id, timestamp, source, payload)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (topic, event_id) DO NOTHING
-        RETURNING event_id;
-    """
-    
-    try:
-        async with pool.acquire() as conn:
-            result = await conn.fetchval(
-                query, 
-                event.topic, 
-                event.event_id, 
-                event.timestamp,
-                event.source,
-                json.dumps(event.payload)
-            )
-            
-            if result:
-                return {"status": "success", "message": "Event processed"}
-            else:
-                await conn.execute("""
-                    UPDATE audit_stats 
-                    SET counter = counter + 1 
-                    WHERE metric_key = 'duplicates_dropped'
-                """)
-                return {"status": "ignored", "message": "Duplicate event detected"}
+    async with pool.acquire() as conn:
 
-    except Exception as e:
-        print(f"Database Error: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        result = await conn.fetchval("""
+            INSERT INTO processed_events (topic, event_id, timestamp, source, payload)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (topic, event_id) DO NOTHING
+            RETURNING event_id
+        """, event.topic, event.event_id, event.timestamp, event.source, json.dumps(event.payload))
+
+        if result is None:
+            print(f"!!! [DEDUPLIKASI] Event Duplikat Diabaikan: {event.event_id} (Topic: {event.topic})", flush=True)
+            
+            await conn.execute("UPDATE audit_stats SET counter = counter + 1 WHERE metric_key = 'duplicates_dropped'")
+            return {"status": "ignored", "message": "Duplicate event detected and dropped"}
+
+        return {"status": "success", "message": "Event processed"}
 
 @app.get("/stats")
 async def get_stats():
