@@ -173,3 +173,8 @@ Proyek ini dilengkapi dengan serangkaian *integration test* yang memvalidasi fun
     ```
 
     Flag `-v` (verbose) akan menampilkan detail dari setiap tes yang dijalankan. Tes mencakup validasi endpoint, logika deduplikasi, *race condition*, dan integritas data.
+
+
+
+
+## LINK VIDEO DEMONSTRASI: https://youtu.be/fgetb6akRuc?si=QfcKSNSqnjlTi7i9
